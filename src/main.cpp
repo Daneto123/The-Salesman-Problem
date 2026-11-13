@@ -35,7 +35,7 @@ void print_usage(std::ostream& os) {
           "\n"
           "Options:\n"
           "  -s, --start N     starting city, 0-based (default 0)\n"
-          "  -a, --algo NAME   nn | rnn | 2opt | exact | all (default all)\n"
+          "  -a, --algo NAME   nn | rnn | 2opt | oropt | exact | all (default all)\n"
           "  -t, --type TYPE   auto | matrix | points (default auto)\n"
           "  -o, --out FILE    save the tours to FILE\n"
           "      --svg FILE    draw the tours as an SVG picture (points files only)\n"
@@ -45,6 +45,7 @@ void print_usage(std::ostream& os) {
           "  nn     nearest neighbour from the start city\n"
           "  rnn    repeated nearest neighbour (best start over all cities)\n"
           "  2opt   repeated nearest neighbour improved with 2-opt\n"
+          "  oropt  repeated nearest neighbour improved with 2-opt and Or-opt\n"
           "  exact  Held-Karp optimum, up to "
        << tsp::kHeldKarpMaxCities
        << " cities\n"
@@ -99,7 +100,8 @@ Options parse_args(int argc, char** argv) {
             throw std::invalid_argument("only one input file is supported");
         }
     }
-    if (opt.algo != "nn" && opt.algo != "rnn" && opt.algo != "2opt" && opt.algo != "exact" &&
+    if (opt.algo != "nn" && opt.algo != "rnn" && opt.algo != "2opt" && opt.algo != "oropt" &&
+        opt.algo != "exact" &&
         opt.algo != "all") {
         throw std::invalid_argument("unknown algorithm '" + opt.algo + "'");
     }
@@ -155,7 +157,7 @@ int run(const Options& opt) {
         times.push_back(ms);
     }
     std::optional<tsp::Tour> rnn;
-    if (all || opt.algo == "rnn" || opt.algo == "2opt") {
+    if (all || opt.algo == "rnn" || opt.algo == "2opt" || opt.algo == "oropt") {
         auto r = timed("Repeated NN", g, [&] { return tsp::repeated_nearest_neighbour(g, opt.start); }, ms);
         rnn = r.tour;
         if (all || opt.algo == "rnn") {
@@ -165,6 +167,10 @@ int run(const Options& opt) {
     }
     if (all || opt.algo == "2opt") {
         results.push_back(timed("2-opt", g, [&] { return tsp::two_opt(g, *rnn); }, ms));
+        times.push_back(ms);
+    }
+    if (all || opt.algo == "oropt") {
+        results.push_back(timed("2-opt + Or-opt", g, [&] { return tsp::two_opt_or_opt(g, *rnn); }, ms));
         times.push_back(ms);
     }
     if (all || opt.algo == "exact") {

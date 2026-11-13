@@ -118,6 +118,83 @@ Tour two_opt(const Graph& g, Tour t) {
     return t;
 }
 
+Tour or_opt(const Graph& g, Tour t) {
+    const int n = static_cast<int>(t.size());
+    constexpr int kMaxChain = 3;
+    if (n < 5) return t;
+
+    bool improved = true;
+    while (improved) {
+        improved = false;
+        for (int len = 1; len <= kMaxChain; ++len) {
+            // Chain t[i .. i+len-1]; tour[0] never moves, so i starts at 1.
+            for (int i = 1; i + len <= n; ++i) {
+                const int first = t[i];
+                const int last = t[i + len - 1];
+                const int prev = t[i - 1];
+                const int next = t[(i + len) % n];
+
+                long long forward = 0;
+                long long backward = 0;
+                for (int k = i; k < i + len - 1; ++k) {
+                    forward += g.dist(t[k], t[k + 1]);
+                    backward += g.dist(t[k + 1], t[k]);
+                }
+                const long long removed = g.dist(prev, first) + g.dist(last, next) - g.dist(prev, next);
+
+                int best_k = -1;
+                bool best_reversed = false;
+                long long best_delta = 0;
+                // Insert between t[k] and t[k+1]; k must not touch the chain.
+                for (int k = 0; k < n; ++k) {
+                    if (k >= i - 1 && k <= i + len - 1) continue;
+                    const int a = t[k];
+                    const int b = t[(k + 1) % n];
+                    const long long gap = g.dist(a, b);
+                    const long long as_is = g.dist(a, first) + g.dist(last, b) - gap - removed;
+                    const long long reversed =
+                        g.dist(a, last) + g.dist(first, b) - gap - removed + backward - forward;
+                    if (as_is < best_delta) {
+                        best_delta = as_is;
+                        best_k = k;
+                        best_reversed = false;
+                    }
+                    if (len > 1 && reversed < best_delta) {
+                        best_delta = reversed;
+                        best_k = k;
+                        best_reversed = true;
+                    }
+                }
+
+                if (best_k >= 0) {
+                    Tour chain(t.begin() + i, t.begin() + i + len);
+                    if (best_reversed) std::reverse(chain.begin(), chain.end());
+                    Tour next_tour;
+                    next_tour.reserve(t.size());
+                    for (int k = 0; k < n; ++k) {
+                        if (k >= i && k < i + len) continue;
+                        next_tour.push_back(t[k]);
+                        if (k == best_k) next_tour.insert(next_tour.end(), chain.begin(), chain.end());
+                    }
+                    t = std::move(next_tour);
+                    improved = true;
+                }
+            }
+        }
+    }
+    return t;
+}
+
+Tour two_opt_or_opt(const Graph& g, Tour t) {
+    long long current = tour_length(g, t);
+    for (;;) {
+        t = or_opt(g, two_opt(g, std::move(t)));
+        const long long after = tour_length(g, t);
+        if (after >= current) return t;
+        current = after;
+    }
+}
+
 std::optional<Tour> held_karp(const Graph& g, int start) {
     const int n = g.size();
     if (start < 0 || start >= n) throw std::out_of_range("start city out of range");

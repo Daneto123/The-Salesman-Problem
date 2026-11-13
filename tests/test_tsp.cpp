@@ -203,11 +203,46 @@ void test_asymmetric_two_opt_never_gets_worse() {
     }
 }
 
+void test_or_opt_never_gets_worse() {
+    for (unsigned seed = 200; seed < 240; ++seed) {
+        const bool symmetric = seed % 2 == 0;
+        const auto g = random_graph(25, symmetric, seed);
+        const auto start = tsp::repeated_nearest_neighbour(g, 2);
+        const auto moved = tsp::or_opt(g, start);
+        const auto both = tsp::two_opt_or_opt(g, start);
+        const auto two = tsp::two_opt(g, start);
+        for (const auto* t : {&moved, &both}) {
+            CHECK(tsp::is_valid_tour(g, *t));
+            CHECK_EQ(t->front(), 2);
+            CHECK(tsp::tour_length(g, *t) <= tsp::tour_length(g, start));
+        }
+        CHECK(tsp::tour_length(g, both) <= tsp::tour_length(g, two));
+    }
+}
+
+void test_or_opt_respects_the_optimum() {
+    for (unsigned seed = 300; seed < 320; ++seed) {
+        const auto g = random_graph(9, seed % 2 == 0, seed);
+        const auto exact = tsp::held_karp(g, 0);
+        const auto t = tsp::two_opt_or_opt(g, tsp::nearest_neighbour(g, 0));
+        CHECK(tsp::tour_length(g, t) >= tsp::tour_length(g, *exact));
+    }
+}
+
+void test_or_opt_moves_a_misplaced_city() {
+    // Cities on a line 0..5; visiting 3 out of order costs extra.
+    const auto g = tsp::parse_instance("6\n1 0 0\n2 1 0\n3 2 0\n4 3 0\n5 4 0\n6 5 0\n").graph;
+    const tsp::Tour bad{0, 1, 3, 2, 4, 5};
+    const auto fixed = tsp::or_opt(g, bad);
+    CHECK_EQ(tsp::tour_length(g, fixed), 10);
+}
+
 void test_tiny_graphs() {
     for (int n = 1; n <= 3; ++n) {
         const auto g = random_graph(n, false, 7);
         CHECK(tsp::is_valid_tour(g, tsp::nearest_neighbour(g, 0)));
         CHECK(tsp::is_valid_tour(g, tsp::two_opt(g, tsp::nearest_neighbour(g, 0))));
+        CHECK(tsp::is_valid_tour(g, tsp::two_opt_or_opt(g, tsp::nearest_neighbour(g, 0))));
         CHECK(tsp::is_valid_tour(g, *tsp::held_karp(g, n - 1)));
     }
 }
@@ -225,6 +260,9 @@ int main() {
         {"held-karp matches brute force", test_held_karp_matches_brute_force},
         {"held-karp start and limits", test_held_karp_start_and_limits},
         {"asymmetric 2-opt never gets worse", test_asymmetric_two_opt_never_gets_worse},
+        {"or-opt never gets worse", test_or_opt_never_gets_worse},
+        {"or-opt respects the optimum", test_or_opt_respects_the_optimum},
+        {"or-opt moves a misplaced city", test_or_opt_moves_a_misplaced_city},
         {"tiny graphs", test_tiny_graphs},
     };
     for (const auto& [name, fn] : tests) {
